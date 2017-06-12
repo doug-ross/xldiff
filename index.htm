@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+	<title>DiffBoy 2000</title>
+
+	<link href='http://fonts.googleapis.com/css?family=Oswald:400,700' rel='stylesheet' type='text/css'>
+	<link href='http://fonts.googleapis.com/css?family=Open+Sans:400italic,700italic,400,700' rel='stylesheet' type='text/css'>
+	
+	<link href="css/sponsor.css" rel="stylesheet" type="text/css">
+    <link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+
+	<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+	<script src="//code.jquery.com/jquery-1.10.2.js"></script>
+	<script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+	<script src="js/jquery-csv.js"></script>	
+	
+	<script src="js/diff.js"></script>
+	<script src="js/tbltools.js"></script>
+
+	<script type="text/javascript">
+	//
+	//	Global settings.
+	//
+	var oSettings = [];
+	
+	function PerformDiff(bSample) {
+		//
+		var f1, f2;
+		//
+		if (bSample) {
+			f1 =		"LNAME\tFNAME\tSSN\tSALARY\tSTATUS\n" +
+						"Davis\tWillie\t123-45-6789\t75000\tACTIVE\n" +
+						"Jackson\tMartha\t233-45-6789\t93000\tACTIVE\n" +
+						"Stuart\tMaribeth\t421-02-6789\t54000\tACTIVE\n" +
+						"Herron\tSarah\t212-81-5430\t96000\tACTIVE\n" +
+						"Kilmeade\tSarah\t660-02-3331\t83000\tSUSPENDED\n" +
+						"Kilmeade\tSarah\t660-02-3331\t83000\tSUSPENDED\n";
+			f2 =		"INDEX\tLNAME\tFNAME\tSSN\tSALARY\tSTATUS\n" +
+						"300\tDavis\tWillie\t123-45-6789\t75000\tACTIVE\n" +
+						"303\tStuart\tMaribeth\t421-02-6789\t63000\tACTIVE\n" +
+						"306\tCarson\tVictor\t987-55-5544\t122500\tACTIVE\n" +
+						"309\tHalsey\tLeonard\t230-12-5454\t123000\tACTIVE\n" +
+						"312\tKilmeade\tSarah\t660-02-3331\t83000\tACTIVE\n";
+		} else {
+			//
+			var aColumns = JSON.parse(oSettings["columns"]);
+			var aColumnsIgnore = [];
+			for (var i = 0; i < aColumns.length; i++) {
+				aColumnsIgnore[i] = false;
+				aColumns[i] = aColumns[i].replace(/\W/g, "");
+				if ($("#IGN" + aColumns[i]).is(':checked')) {
+					aColumnsIgnore[i] = true;
+				}
+			}
+			oSettings["columnsignore"] = aColumnsIgnore;
+			//
+			f1 = $("#file1").val();
+			f2 = $("#file2").val();
+			//
+		}
+		//
+		var oDiffs = GenerateDiffs(f1, f2, oSettings);
+		//
+		if (oDiffs["error"] != "") {
+			//
+			$("#statusbar").html(oDiffs["error"]);
+			ga('send', 'event', 'diff', 'failed', oDiffs["error"], 1);
+			//
+		} else {
+			var sTemp = "";
+			//
+			sTemp = "" + oDiffs["rowsmatched"] + " rows matched between files. ";
+			sTemp += "Of those, " + oDiffs["rowschanged"] + " had changes. ";
+			sTemp += "" + oDiffs["rowsdeleted"] + " rows were deleted. ";
+			sTemp += "And " + oDiffs["rowsadded"] + " rows were added.";
+			//
+			$("#statusbar").html(sTemp);
+			//
+			ga('send', 'event', 'diff', 'succeeded', sTemp, 1);
+		}
+		//
+		console.log(oDiffs);
+		//
+		$(".difference-tracker").html("<br /><br /><pre>" + oDiffs["log"] + "</pre>");
+		//
+		var a = window.document.createElement('a');
+		a.href = window.URL.createObjectURL(new Blob([ ConvertTabDelimittedToCSV(oDiffs["log"]) ], {type: 'text/csv'}));
+		a.download = oSettings["difffile"];
+		var t = document.createTextNode("Click here to download a spreadsheet of the changes");
+		a.appendChild(t)
+		//
+		$(".difference-tracker").prepend(a);
+		//
+		var sTemp;
+		sTemp = ConvertFileToTable(f1, oSettings, oDiffs, 1);
+		$("#worker1").html(sTemp);
+		sTemp = ConvertFileToTable(f2, oSettings, oDiffs, 2);
+		$("#worker2").html(sTemp);
+		//
+	}
+
+	$(function() {
+
+		// Set up controls.
+		//
+		$("#tabs").tabs();
+		$("#column-matching-radio").buttonset();
+		$("#demo-data").buttonset();
+		//
+		//	Other column-matching methods aren't implemented yet (+++).
+		//
+		$("#cmr-alphanumeric").attr('disabled',true);
+		$("#cmr-fuzzy").attr('disabled',true);
+		//
+		oSettings["showonlydiffs"] = false;
+		oSettings["difffile"] = "test.csv";
+		
+		//	Get suggested files.
+		//
+		var sPrefix = "Please choose file ";
+		var sFile1 = GetParameterByName("f1");
+		if (sFile1 != null) {
+			$('#fileprompt1').html(sPrefix + sFile1);
+		}
+		var sFile2 = GetParameterByName("f2");
+		if (sFile2 != null) {
+			$('#fileprompt2').html(sPrefix + sFile2);
+		}
+	
+		//	Perform a sample diff.
+		//
+		PerformDiff(true);
+
+		//	Reset sample buttons.
+		//
+		$('#demo-data1').prop('checked', true).button("refresh");
+		$("#demo-data2").prop('checked', false).button("refresh");
+
+		$("#clearfile1").click(function(event) {
+			$("#file1").html("");
+		});
+
+		$("#clearfile2").click(function(event) {
+			$("#file2").html("");
+		});
+		
+		$("#showdiff").button().click(function(event) {
+			//
+			// SmokeTestDiff();
+			//
+			var s1 = $('#demo-data1:checked');
+			var s2 = $('#demo-data2:checked');
+			var bSample = (s2.length > 0);
+			//
+			var sTemp = $("#file1matchingcolumn").val();
+			if (sTemp != null  &&  sTemp.length) {
+				oSettings["matchingcolumnname1"] = sTemp;
+			}
+			var sTemp = $("#file2matchingcolumn").val();
+			if (sTemp != null  &&  sTemp.length) {
+				oSettings["matchingcolumnname2"] = sTemp;
+			}
+			//
+			PerformDiff(bSample);
+			//
+			if (bSample) {
+				$('#demo-data1').prop('checked', true).button("refresh");
+				$("#demo-data2").prop('checked', false).button("refresh");
+			}
+			//
+		});
+
+		$("#showonlydiffs").change(function() {
+			//
+			var bShowOnlyDiffs = (oSettings["showonlydiffs"] = !oSettings["showonlydiffs"]);
+			$('.worker tr').each(function (i, row) {
+				var oRow = $(row);
+				if (!bShowOnlyDiffs) {
+					oRow.show();
+				} else if (!oRow[0].className.length) {
+					oRow.hide();
+				}
+			});
+		
+		});
+		
+		// File 1 changed.
+		//
+		$('#file1').bind('input propertychange', function() {
+			if (this.value.length) {
+				SetupFileHandling(this.value);
+			}
+		});
+
+		// File 2 changed.
+		//
+		$('#file2').bind('input propertychange', function() {
+			if (this.value.length) {
+			}
+		});
+
+		//	File 1 upload button.
+		//
+		$("#filename1").change(function(e) {
+			ReadTextFile("#file1", e, true);
+			return false;
+		});
+
+		//	File 2 upload button.
+		//
+		$("#filename2").change(function(e) {
+			ReadTextFile("#file2", e, false);
+			//
+			//	Suggest a good name for the difference download file.
+			//
+			var sDiffFile = e.target.value;
+			var aTemp = sDiffFile.split("\\");
+			if (aTemp.length) {
+				sDiffFile = aTemp[aTemp.length - 1];
+			}
+			aTemp = sDiffFile.split(".");
+			if (aTemp.length > 1) {
+				aTemp.pop();
+				aTemp.push("-diffs.csv");
+				sDiffFile = aTemp.join(".");
+			}
+			oSettings["difffile"] = sDiffFile;
+			return false;
+		});
+		
+	});
+
+	</script>
+  </head>
+
+  <body>
+
+	<div class="container-fluid">
+	
+		<div class="row">
+			<div class="col-md-12">
+				<div class="pin" style="background-color: white !important;">
+					
+					<div style="float:left;margin: 0 48px 0 0">
+					<h2>DiffBoy 2000</h2>
+					</div>
+
+					<div style="float:right;margin: 0 0 0 48px">
+					<img src="img/logo.jpg" height="54" style="border:none; padding: 3px 0 3px 0;" />
+					</div>
+					
+					<h3>Compare two spreadsheets the smart way</h3>
+					<p>
+					Fast and Secure: No data ever leaves your browser
+					</p>
+
+				</div>
+			</div>
+		</div>
+
+		<div class="row">
+			<div class="col-md-6">
+				<div class="pin" id="pin1">
+
+					<div class="titlebar" id="title-1">
+						<div class="floatbar">File 1</div>
+						<input type="file" name="filename1" id="filename1" class="floatbar smallbutton" />
+						<div id="fileprompt1" class="floatbar smallbutton normaltext"></div>
+						<button id="clearfile1" class="smallbutton floatbarright">Clear</button>
+					</div>
+
+					<textarea id="file1" class="filetext"></textarea>
+
+				</div>
+			</div>
+
+			<div class="col-md-6">
+				<div class="pin" id="pin2">
+
+					<div class="titlebar" id="title-2">
+						<div class="floatbar">File 2</div>
+						<input type="file" name="filename2" id="filename2" class="floatbar smallbutton" />
+						<div id="fileprompt2" class="floatbar smallbutton normaltext"></div>
+						<button id="clearfile2" class="smallbutton floatbarright">Clear</button>
+					</div>
+
+					<textarea id="file2" class="filetext"></textarea>
+
+				</div>
+			</div>
+		</div>
+
+		<div class="row">
+			<div class="col-md-12">
+				<div class="pin" id="pin3">
+
+					<div class="titlebar2" id="title-3">
+
+						<button id="showdiff" class="button floatbar">Show Differences...</button>
+						
+						<div id="statusbar" class="statusbar"></div>
+
+						<div class="floatbar">
+							<input type="checkbox" id="showonlydiffs" class="floatbar checkbox"><label for="showonlydiffs" class="floatbar checkboxlabel">Show Differences Only</label>
+						</div>
+
+						<div id="demo-data" class="radioz">
+							<input type="radio" id="demo-data1" name="demo-data"><label for="demo-data1">Compare Files</label>
+							<input type="radio" id="demo-data2" name="demo-data"><label for="demo-data2">Show Example</label>
+						</div>
+
+					</div>
+
+					<div class="row">
+
+						<div class="col-md-6">
+							<div class="pin" id="pinw1">
+								<div class="pinworker">
+									<table class="worker" id="worker1">
+
+									</table>
+								</div>
+							</div>
+						</div>
+
+						<div class="col-md-6">
+							<div class="pin" id="pinw2">
+								<div class="pinworker">
+									<table class="worker" id="worker2">
+
+									</table>
+								</div>
+							</div>
+						</div>
+						
+					</div>
+
+				</div>
+			</div>
+		</div>
+		
+		<div class="row">
+			<div class="col-md-12">
+				<div class="pin" id="pin4">
+
+					<div class="titlebar" id="title-3">Settings
+					</div>
+
+					<div id="tabs">
+						<ul>
+							<li><a href="#tabs-1">Assumptions</a></li>
+							<li><a href="#tabs-2">Columns</a></li>
+							<li><a href="#tabs-3">Difference Tracker</a></li>
+						</ul>
+						<div id="tabs-1">
+
+							<div class="row">
+								<div class="col-md-4">
+									<div class="pin">
+
+										<div class="titlebar">Delimiter
+										</div>
+
+										<div id="currentdelimiter" class="statusbar"></div>
+				
+									</div>
+								</div>
+
+								<div class="col-md-4">
+									<div class="pin">
+
+										<div class="titlebar">How Rows Should Be Matched
+										</div>
+
+										<label for="file1matchingcolumn">Select column(s) to match in file 1: </label>
+										<input class="normalinput" name="file1matchingcolumn" id="file1matchingcolumn" value="SSN,EE Plan Type,Class,Multiple of Salary Factor,Spouse Last Name,Spouse Amount">
+
+										<label for="file2matchingcolumn">Select column(s) to match in file 2: </label>
+										<input class="normalinput" name="file2matchingcolumn" id="file2matchingcolumn" value="SSN,EE Plan Type,Class,Multiple of Salary Factor,Spouse Last Name,Spouse Amount">
+
+									</div>
+								</div>
+
+								<div class="col-md-4">
+									<div class="pin">
+
+										<div class="titlebar">How Column Names Should Be Matched
+										</div>
+
+										  <div id="column-matching-radio">
+											<input type="radio" id="cmr-exact" name="column-matching-radio" checked="checked"><label for="cmr-exact">Exact</label>
+											<input type="radio" id="cmr-alphanumeric" name="column-matching-radio"><label for="cmr-alphanumeric">Alpha only</label>
+											<input type="radio" id="cmr-fuzzy" name="column-matching-radio"><label for="cmr-fuzzy">Fuzzy</label>
+										  </div>
+
+									</div>
+								</div>
+							</div>
+
+						</div>
+
+						<div id="tabs-2">
+							<div class="pinworker">
+
+								<p>Check any columns to ignore during the comparison:</p>
+							
+								<table class="ignworker" id="ignorecolumns">
+
+								</table>
+							</div>
+						</div>
+
+						<div id="tabs-3" class="difference-tracker pinworker">
+
+						</div>
+
+					</div>
+
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<div class="container-fluid">
+		<div class="row" style="text-align:center;">
+			GPL License - Written by Doug-Ross (Git) at douglasross@gmail.com - No warranty expressed or implied
+		</div>
+	</div>
+	
+  </body>
+	<script>
+	  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+	  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+	  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+	  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+	  ga('create', 'UA-63066106-1', 'auto');
+	  ga('send', 'pageview');
+
+	</script>
+</html>
